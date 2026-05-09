@@ -1,1 +1,5 @@
 .env
+/.venv
+/__pycache__
+/alijr_knowledge_base
+/chroma_db
