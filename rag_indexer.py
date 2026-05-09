@@ -6,7 +6,13 @@ Install ``llama-index-readers-file`` (listed in ``requirements.txt``): without i
 ``.pdf`` files are read as raw bytes interpreted as UTF-8 and indexing produces garbage chunks.
 Requires Ollama running locally (or set ``OLLAMA_BASE_URL``) with ``ollama pull <model>``.
 Optional env: ``OLLAMA_EMBED_MODEL`` (default ``nomic-embed-text``), ``OLLAMA_BASE_URL``.
+Under ``alijr_knowledge_base/projects/``, chunk metadata includes ``project_name`` (README parent dir),
+``project_root`` (first path segment under ``projects/``), and ``project_keywords`` for filtering.
+
 If you previously used another embedding backend, delete ``./chroma_db`` and re-index.
+
+``.html`` / ``.htm`` under ``alijr_knowledge_base/`` (including whole exported site folders) are parsed
+with BeautifulSoup: scripts/styles removed, visible text extracted for embedding.
 
 Incremental runs skip unchanged files using ``./chroma_db/index_file_state.json`` (mtime/size per
 indexed document id). Embedding throughput: ``RAG_EMBED_BATCH_SIZE`` (default 24),
@@ -24,14 +30,18 @@ import logging
 import os
 import re
 import shutil
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, ClassVar, Sequence
 
 logger = logging.getLogger(__name__)
 
 from dotenv import load_dotenv
+from fsspec import AbstractFileSystem
 from google.oauth2 import service_account as sa_credentials
 from llama_index.core import SimpleDirectoryReader, Settings, StorageContext, VectorStoreIndex
+from llama_index.core.readers.base import BaseReader
+from llama_index.core.readers.file.base import get_default_fs, is_default_fs
+from llama_index.core.schema import Document
 from llama_index.core.base.embeddings.base import BaseEmbedding
 from llama_index.core.bridge.pydantic import PrivateAttr
 from llama_index.core.constants import DEFAULT_EMBED_BATCH_SIZE
@@ -59,6 +69,60 @@ def _maybe_configure_rag_logging() -> None:
     if os.getenv("RAG_QUIET_PYPDF", "1").strip().lower() in ("1", "true", "yes"):
         for name in ("pypdf", "pypdf._reader", "pypdf.generic"):
             logging.getLogger(name).setLevel(logging.ERROR)
+
+
+class HtmlFileReader(BaseReader):
+    """Load HTML pages as plain text (tags stripped) for vector indexing."""
+
+    def load_data(
+        self,
+        file: Path | PurePosixPath | str,
+        extra_info: dict[str, Any] | None = None,
+        fs: AbstractFileSystem | None = None,
+    ) -> list[Document]:
+        try:
+            from bs4 import BeautifulSoup
+        except ImportError as exc:  # pragma: no cover
+            raise ImportError(
+                "Indexing .html files requires beautifulsoup4 (see requirements.txt)."
+            ) from exc
+
+        fs = fs or get_default_fs()
+        _Path = Path if is_default_fs(fs) else PurePosixPath
+        if not isinstance(file, (Path, PurePosixPath)):
+            file = _Path(file)
+
+        with fs.open(str(file), "rb") as fp:
+            raw = fp.read()
+        decoded = raw.decode("utf-8", errors="ignore")
+
+        soup = BeautifulSoup(decoded, "html.parser")
+        for tag in soup(["script", "style", "noscript", "template"]):
+            tag.decompose()
+
+        title_el = soup.find("title")
+        title = title_el.get_text(strip=True) if title_el else ""
+        h1_el = soup.find("h1")
+        h1_text = h1_el.get_text(strip=True) if h1_el else ""
+
+        body_text = soup.get_text(separator="\n", strip=True)
+        lines = [ln for ln in (line.strip() for line in body_text.splitlines()) if ln]
+        collapsed = "\n".join(lines)
+
+        header_parts: list[str] = []
+        if title:
+            header_parts.append(title)
+        if h1_text and h1_text != title:
+            header_parts.append(h1_text)
+        header = "\n\n".join(header_parts)
+
+        text = f"{header}\n\n{collapsed}" if header else collapsed
+
+        metadata: dict[str, Any] = {"file_name": file.name, "file_format": "html"}
+        if extra_info:
+            metadata.update(extra_info)
+
+        return [Document(text=text or "(empty html body)", metadata=metadata)]
 
 
 def _vertex_gemini_retry_fields() -> dict[str, Any]:
@@ -287,10 +351,11 @@ def _apply_embed_throughput_settings(
 
 
 def file_metadata(filepath: str) -> dict[str, Any]:
-    """Attach file path/name and immediate subfolder under the knowledge root as folder_category."""
+    """Attach path, ``folder_category``, and project fields under ``projects/``."""
 
     path = Path(filepath).expanduser().resolve(strict=False)
     root = KNOWLEDGE_BASE_DIR.resolve()
+    projects_root = root / "projects"
     category = "unknown"
     try:
         rel = path.relative_to(root)
@@ -301,11 +366,28 @@ def file_metadata(filepath: str) -> dict[str, Any]:
     except ValueError:
         pass
 
-    return {
+    meta: dict[str, Any] = {
         "file_path": str(path),
         "file_name": path.name,
         "folder_category": category,
     }
+    if category == "projects":
+        meta["project_name"] = path.parent.name
+        try:
+            rel_p = path.relative_to(projects_root)
+            root_slug = rel_p.parts[0] if rel_p.parts else ""
+        except ValueError:
+            root_slug = ""
+        meta["project_root"] = root_slug
+        # Single string for lexical overlap in embeddings + keyword-style filtering in agents.
+        kw = {s for s in (meta["project_name"], root_slug) if s}
+        meta["project_keywords"] = " ".join(sorted(kw))
+    else:
+        meta["project_name"] = ""
+        meta["project_root"] = ""
+        meta["project_keywords"] = ""
+
+    return meta
 
 
 def _resolve_embedder() -> tuple[Any, dict[str, Any]]:
@@ -397,6 +479,13 @@ def main() -> None:
             "PDFs would be corrupted if indexed.",
             flush=True,
         )
+    try:
+        import bs4  # noqa: F401
+    except ImportError:
+        print(
+            "WARN: beautifulsoup4 not installed — .html/.htm files cannot be indexed cleanly.",
+            flush=True,
+        )
 
     embed_model, embed_descriptor = _resolve_embedder()
     provider_key = embed_descriptor.get("provider", "").lower().strip()
@@ -418,19 +507,24 @@ def main() -> None:
             shutil.rmtree(CHROMA_DB_DIR, ignore_errors=True)
             CHROMA_DB_DIR.mkdir(parents=True, exist_ok=True)
 
+    _html_reader = HtmlFileReader()
     reader = SimpleDirectoryReader(
         input_dir=str(KNOWLEDGE_BASE_DIR),
         recursive=True,
         filename_as_id=True,
-        required_exts=[".pdf", ".md", ".markdown", ".txt"],
+        required_exts=[".pdf", ".md", ".markdown", ".txt", ".html", ".htm"],
         exclude_hidden=True,
         file_metadata=file_metadata,
+        file_extractor={
+            ".html": _html_reader,
+            ".htm": _html_reader,
+        },
         errors="ignore",
     )
     docs = reader.load_data()
     if not docs:
         print(f"No supported files found under {KNOWLEDGE_BASE_DIR}")
-        print("Add PDF/Markdown/text files to subfolders, then re-run.")
+        print("Add PDF/Markdown/text/HTML files to subfolders, then re-run.")
         return
 
     # Must match agent.py query embeddings, or retrieval quality will degrade.

@@ -8,11 +8,12 @@ import {
   useVoiceAssistant,
 } from "@livekit/components-react";
 import { useMemo, useState } from "react";
+import { DevTraceFeed } from "@/components/DevTraceFeed";
 import { fetchToken } from "@/lib/token";
 
 type ConnectionState = "disconnected" | "connecting" | "connected";
 
-function AgentView() {
+function AgentView({ devTraceEnabled }: { devTraceEnabled: boolean }) {
   const { state, audioTrack } = useVoiceAssistant();
   const transcriptions = useTranscriptions();
 
@@ -41,6 +42,8 @@ function AgentView() {
         />
       </div>
 
+      <DevTraceFeed enabled={devTraceEnabled} />
+
       <div className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-5">
         <h2 className="mb-3 text-sm font-medium text-zinc-200">Live Transcript</h2>
         <div className="max-h-80 space-y-3 overflow-y-auto pr-2">
@@ -65,6 +68,7 @@ export default function Home() {
   const [token, setToken] = useState<string | null>(null);
   const [serverUrl, setServerUrl] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
+  const [devTraceEnabled, setDevTraceEnabled] = useState(false);
 
   const liveKitUrl = serverUrl ?? process.env.NEXT_PUBLIC_LIVEKIT_URL;
 
@@ -72,7 +76,9 @@ export default function Home() {
     try {
       setError(null);
       setConnectionState("connecting");
-      const tokenResp = await fetchToken("AliJR Web Client");
+      const tokenResp = await fetchToken("AliJR Web Client", {
+        devTrace: devTraceEnabled,
+      });
       setServerUrl(tokenResp.livekit_url);
       setToken(tokenResp.token);
     } catch (err) {
@@ -98,6 +104,21 @@ export default function Home() {
           </p>
 
           <div className="mt-6 flex flex-wrap items-center gap-3">
+            {connectionState !== "connected" && (
+              <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-950/60 px-3 py-2 text-xs text-zinc-300 transition hover:border-zinc-600">
+                <input
+                  type="checkbox"
+                  checked={devTraceEnabled}
+                  onChange={(e) => setDevTraceEnabled(e.target.checked)}
+                  className="accent-amber-500"
+                />
+                <span>
+                  Developer trace{" "}
+                  <span className="text-zinc-500">(RAG / filters → UI + worker logs)</span>
+                </span>
+              </label>
+            )}
+
             {connectionState !== "connected" && (
               <button
                 onClick={startCall}
@@ -152,7 +173,7 @@ export default function Home() {
               className="mt-6"
             >
               <RoomAudioRenderer />
-              <AgentView />
+              <AgentView devTraceEnabled={devTraceEnabled} />
             </LiveKitRoom>
           )}
         </div>

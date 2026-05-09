@@ -9,6 +9,7 @@ Google services used by the agent.
 
 from __future__ import annotations
 
+import json
 import os
 
 from dotenv import load_dotenv
@@ -65,6 +66,10 @@ class MintTokenBody(BaseModel):
         default=None,
         description="Display name; defaults to participant_identity.",
     )
+    dev_trace: bool = Field(
+        default=False,
+        description="Embed alijr_dev_trace in participant metadata so the agent mirrors debug panels.",
+    )
 
 
 @app.post("/token", response_model=TokenResponse)
@@ -76,7 +81,7 @@ async def mint_participant_token(body: MintTokenBody) -> TokenResponse:
         "GOOGLE_APPLICATION_CREDENTIALS",
     )
 
-    token = (
+    builder = (
         api.AccessToken(env["LIVEKIT_API_KEY"], env["LIVEKIT_API_SECRET"])
         .with_identity(body.participant_identity)
         .with_name(body.participant_name or body.participant_identity)
@@ -88,8 +93,10 @@ async def mint_participant_token(body: MintTokenBody) -> TokenResponse:
                 can_subscribe=True,
             )
         )
-        .to_jwt()
     )
+    if body.dev_trace:
+        builder = builder.with_metadata(json.dumps({"alijr_dev_trace": True}))
+    token = builder.to_jwt()
 
     return TokenResponse(
         token=token,

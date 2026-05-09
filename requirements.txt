@@ -11,6 +11,8 @@ llama-index-embeddings-ollama>=0.3.0
 llama-index-embeddings-google-genai>=0.2.0
 llama-index-vector-stores-chroma==0.5.5
 
+beautifulsoup4>=4.12.3
+
 chromadb==1.5.9
 # Do not install chromadb-client in this env — it shadows chromadb with HTTP-only mode and breaks PersistentClient / rag_indexer.
 

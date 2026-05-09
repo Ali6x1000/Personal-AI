@@ -5,13 +5,25 @@ export type TokenResponse = {
   identity: string;
 };
 
-export async function fetchToken(participantName: string): Promise<TokenResponse> {
+export type FetchTokenOptions = {
+  devTrace?: boolean;
+};
+
+export async function fetchToken(
+  participantName: string,
+  options: FetchTokenOptions = {},
+): Promise<TokenResponse> {
   const normalizedIdentity = `web-${participantName
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "")}-${Date.now()}`;
 
-  const response = await fetch("http://localhost:8000/token", {
+  const base =
+    typeof process !== "undefined" && process.env.NEXT_PUBLIC_TOKEN_API_URL
+      ? process.env.NEXT_PUBLIC_TOKEN_API_URL.replace(/\/$/, "")
+      : "http://localhost:8000";
+
+  const response = await fetch(`${base}/token`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -21,6 +33,7 @@ export async function fetchToken(participantName: string): Promise<TokenResponse
       room_name: "alijr-test",
       participant_identity: normalizedIdentity,
       participant_name: participantName,
+      dev_trace: Boolean(options.devTrace),
     }),
     cache: "no-store",
   });
