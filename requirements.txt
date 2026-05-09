@@ -5,14 +5,14 @@ livekit-plugins-google==1.5.8
 livekit-api==1.1.0
 
 llama-index==0.14.21
-llama-index-llms-gemini==0.6.2
+llama-index-llms-google-genai>=0.2.0
 llama-index-embeddings-ollama>=0.3.0
+llama-index-embeddings-google-genai>=0.2.0
 llama-index-vector-stores-chroma==0.5.5
 
 chromadb==1.5.9
 # Do not install chromadb-client in this env — it shadows chromadb with HTTP-only mode and breaks PersistentClient / rag_indexer.
 
-google-generativeai==0.8.6
 protobuf==5.29.6
 
 python-dotenv==1.2.2

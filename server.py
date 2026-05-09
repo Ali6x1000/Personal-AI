@@ -1,9 +1,10 @@
 """
 FastAPI: mint LiveKit room tokens for the frontend.
 
-Reads LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET, and GOOGLE_API_KEY from the
-environment (via python-dotenv when present). All four must be set before tokens
-are issued so deployment mistakes surface early.
+Reads LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET, and
+GOOGLE_APPLICATION_CREDENTIALS from the environment (via python-dotenv when
+present). The Google credentials check ensures the backend is configured for
+Google services used by the agent.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ import os
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from livekit import api
 from pydantic import BaseModel, Field
 
@@ -19,6 +21,17 @@ from pydantic import BaseModel, Field
 load_dotenv()
 
 app = FastAPI(title="AliJR LiveKit token API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 def _require_env(*keys: str) -> dict[str, str]:
@@ -60,7 +73,7 @@ async def mint_participant_token(body: MintTokenBody) -> TokenResponse:
         "LIVEKIT_URL",
         "LIVEKIT_API_KEY",
         "LIVEKIT_API_SECRET",
-        "GOOGLE_API_KEY",
+        "GOOGLE_APPLICATION_CREDENTIALS",
     )
 
     token = (
