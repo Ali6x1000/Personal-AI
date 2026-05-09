@@ -11,9 +11,11 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import time
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from livekit import api
 from pydantic import BaseModel, Field
@@ -23,16 +25,20 @@ load_dotenv()
 
 app = FastAPI(title="AliJR LiveKit token API")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
+_default_origins = "http://localhost:3000,http://127.0.0.1:3000"
+_cors_origins = [x.strip() for x in os.getenv("CORS_ALLOW_ORIGINS", _default_origins).split(",") if x.strip()]
+_cors_regex = os.getenv("CORS_ALLOW_ORIGIN_REGEX", "").strip()
+
+_cors_kw: dict = dict(
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+if _cors_regex:
+    _cors_kw["allow_origin_regex"] = _cors_regex
+
+app.add_middleware(CORSMiddleware, **_cors_kw)
 
 
 def _require_env(*keys: str) -> dict[str, str]:
@@ -72,8 +78,21 @@ class MintTokenBody(BaseModel):
     )
 
 
-@app.post("/token", response_model=TokenResponse)
-async def mint_participant_token(body: MintTokenBody) -> TokenResponse:
+def _normalized_web_identity(display_name: str) -> str:
+    """Match alijr-frontend slug convention for participant_identity."""
+
+    slug = re.sub(r"[^a-z0-9]+", "-", display_name.lower())
+    slug = re.sub(r"^-+|-+$", "", slug)
+    return f"web-{slug}-{int(time.time() * 1000)}"
+
+
+def _mint_access_token_response(
+    *,
+    room_name: str,
+    participant_identity: str,
+    participant_name: str | None,
+    dev_trace: bool,
+) -> TokenResponse:
     env = _require_env(
         "LIVEKIT_URL",
         "LIVEKIT_API_KEY",
@@ -81,26 +100,54 @@ async def mint_participant_token(body: MintTokenBody) -> TokenResponse:
         "GOOGLE_APPLICATION_CREDENTIALS",
     )
 
+    display = participant_name or participant_identity
     builder = (
         api.AccessToken(env["LIVEKIT_API_KEY"], env["LIVEKIT_API_SECRET"])
-        .with_identity(body.participant_identity)
-        .with_name(body.participant_name or body.participant_identity)
+        .with_identity(participant_identity)
+        .with_name(display)
         .with_grants(
             api.VideoGrants(
                 room_join=True,
-                room=body.room_name,
+                room=room_name,
                 can_publish=True,
                 can_subscribe=True,
             )
         )
     )
-    if body.dev_trace:
+    if dev_trace:
         builder = builder.with_metadata(json.dumps({"alijr_dev_trace": True}))
-    token = builder.to_jwt()
+    token_jwt = builder.to_jwt()
 
     return TokenResponse(
-        token=token,
+        token=token_jwt,
         livekit_url=env["LIVEKIT_URL"],
-        room=body.room_name,
-        identity=body.participant_identity,
+        room=room_name,
+        identity=participant_identity,
+    )
+
+
+@app.get("/getToken", response_model=TokenResponse)
+async def get_participant_token(
+    name: str = Query(..., min_length=1, description="Display name for the browser participant."),
+    room_name: str = Query(default="alijr-test", min_length=1),
+    dev_trace: bool = Query(default=False),
+) -> TokenResponse:
+    """Simple GET mint for Vercel / curl; identity is generated server-side."""
+
+    pid = _normalized_web_identity(name)
+    return _mint_access_token_response(
+        room_name=room_name,
+        participant_identity=pid,
+        participant_name=name,
+        dev_trace=dev_trace,
+    )
+
+
+@app.post("/token", response_model=TokenResponse)
+async def mint_participant_token(body: MintTokenBody) -> TokenResponse:
+    return _mint_access_token_response(
+        room_name=body.room_name,
+        participant_identity=body.participant_identity,
+        participant_name=body.participant_name,
+        dev_trace=body.dev_trace,
     )

@@ -70,7 +70,11 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [devTraceEnabled, setDevTraceEnabled] = useState(false);
 
-  const liveKitUrl = serverUrl ?? process.env.NEXT_PUBLIC_LIVEKIT_URL;
+  /** Prefer URL returned by the token API; optional NEXT_PUBLIC_LIVEKIT_URL override when set at build time. */
+  const liveKitUrl =
+    serverUrl ??
+    (typeof process !== "undefined" ? process.env.NEXT_PUBLIC_LIVEKIT_URL?.trim() : undefined) ??
+    "";
 
   const startCall = async () => {
     try {
@@ -122,7 +126,7 @@ export default function Home() {
             {connectionState !== "connected" && (
               <button
                 onClick={startCall}
-                disabled={connectionState === "connecting" || !liveKitUrl}
+                disabled={connectionState === "connecting"}
                 className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-black transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
               >
                 {connectionState === "connecting" ? "Connecting..." : "Start Call"}
@@ -143,11 +147,18 @@ export default function Home() {
             </span>
           </div>
 
-          {!liveKitUrl && (
-            <p className="mt-4 text-sm text-amber-400">
-              Missing NEXT_PUBLIC_LIVEKIT_URL in your frontend environment.
-            </p>
-          )}
+          <p className="mt-4 text-xs leading-relaxed text-zinc-500">
+            Backend:{" "}
+            <code className="rounded bg-zinc-950/80 px-1.5 py-0.5 text-zinc-400">
+              {typeof process !== "undefined"
+                ? process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/$/, "") || "http://localhost:8000"
+                : "http://localhost:8000"}
+            </code>
+            . Set <code className="rounded bg-zinc-950/80 px-1 py-0.5 text-zinc-400">NEXT_PUBLIC_BACKEND_URL</code>{" "}
+            on Vercel for production. LiveKit URL normally comes from the token response; optionally set{" "}
+            <code className="rounded bg-zinc-950/80 px-1 py-0.5 text-zinc-400">NEXT_PUBLIC_LIVEKIT_URL</code> as an
+            override.
+          </p>
           {error && <p className="mt-4 text-sm text-rose-400">{error}</p>}
 
           {token && (
