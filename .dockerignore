@@ -1,0 +1,10 @@
+# Local secrets and tooling
+.env
+.venv/
+__pycache__/
+.git/
+
+# Avoid copying loose credential JSON from the host (e.g. cred/*.json).
+# Chroma metadata JSON inside chroma_db/ is re-included below.
+**/*.json
+!chroma_db/**
