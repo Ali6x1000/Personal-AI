@@ -5,6 +5,7 @@ livekit-plugins-google==1.5.8
 livekit-api==1.1.0
 
 llama-index==0.14.21
+llama-index-readers-file==0.6.0
 llama-index-llms-google-genai>=0.2.0
 llama-index-embeddings-ollama>=0.3.0
 llama-index-embeddings-google-genai>=0.2.0
