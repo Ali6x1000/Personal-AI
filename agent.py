@@ -1000,25 +1000,52 @@ class KnowledgeBaseTools(Toolset):
             return f"search_documents error: {exc}. Check Vertex credentials and indexer metadata."
 
 
-def _attach_dev_trace_room_hooks(room: rtc.Room) -> None:
+def _attach_dev_trace_room_hooks(room: rtc.Room, *, loop: asyncio.AbstractEventLoop) -> None:
     """Wire UI-driven tracing: JWT metadata, control data packets, and panel mirror."""
 
     _activation_logged = False
 
     def publish_wire(payload: dict[str, Any]) -> None:
-        if not room.isconnected():
-            return
+        """``publish_data`` is async; schedule on the agent loop (tools already run on that loop)."""
+
         try:
             wire = json.dumps(payload, ensure_ascii=False, default=str)
             if len(wire) > 48_000:
                 wire = wire[:48_000] + "…"
-            room.local_participant.publish_data(
-                wire,
-                reliable=True,
-                topic=dev_trace.ALIJR_DEV_TRACE_TOPIC,
-            )
+            data = wire.encode("utf-8")
         except Exception:
-            pass
+            return
+
+        async def _send() -> None:
+            if not room.isconnected():
+                return
+            try:
+                await room.local_participant.publish_data(
+                    data,
+                    reliable=True,
+                    topic=dev_trace.ALIJR_DEV_TRACE_TOPIC,
+                )
+            except Exception as exc:
+                logger.warning("dev_trace publish_data failed: %s", exc)
+
+        def _enqueue_on_agent_loop() -> None:
+            try:
+                asyncio.ensure_future(_send(), loop=loop)
+            except RuntimeError as exc:
+                logger.warning("dev_trace could not enqueue publish_data: %s", exc)
+
+        try:
+            running = asyncio.get_running_loop()
+        except RuntimeError:
+            running = None
+
+        if running is loop:
+            asyncio.create_task(_send())
+        else:
+            try:
+                loop.call_soon_threadsafe(_enqueue_on_agent_loop)
+            except RuntimeError as exc:
+                logger.warning("dev_trace call_soon_threadsafe failed: %s", exc)
 
     dev_trace.set_data_publish_hook(publish_wire)
 
@@ -1133,7 +1160,7 @@ async def entrypoint(ctx: JobContext) -> None:
     agent = Agent(instructions=ALIJR_SYSTEM_PROMPT)
 
     await session.start(agent=agent, room=ctx.room)
-    _attach_dev_trace_room_hooks(ctx.room)
+    _attach_dev_trace_room_hooks(ctx.room, loop=asyncio.get_running_loop())
     if dev_trace.is_dev_mode():
         room_name = getattr(ctx.room, "name", "") or "(room)"
         dev_trace.panel(

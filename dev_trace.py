@@ -9,7 +9,8 @@ Developer tracing for AliJR (off by default).
 Optional:
 - ``ALIJR_DEV_VERBOSE=1`` — longer chunk excerpts.
 - ``ALIJR_DEV_RESUME_FULL=1`` — log full resume (default is a short preview for privacy).
-- ``ALIJR_DEV_WIRE_MAX_CHARS`` — cap JSON field size when publishing to the UI (default 900).
+- ``ALIJR_DEV_WIRE_MAX_CHARS`` — legacy cap when ``ALIJR_DEV_WIRE_SUMMARY=0`` (full rows to UI).
+- ``ALIJR_DEV_WIRE_SUMMARY`` — default ``1``: UI receives short summaries only; stderr keeps full panels.
 """
 
 from __future__ import annotations
@@ -88,10 +89,45 @@ def _sanitize_wire_val(val: Any, max_len: int) -> Any:
     return _truncate_wire_text(str(val), max_len)
 
 
+def wire_summary_mode() -> bool:
+    return os.getenv("ALIJR_DEV_WIRE_SUMMARY", "1").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _compact_wire_summary(_title: str, rows: list[tuple[str, Any]]) -> str:
+    """Short lines for the web UI (how retrieval/filtering proceeded), not full dumps."""
+
+    lines_out: list[str] = []
+    for key, val in rows:
+        if key == "retrieval_hits" and isinstance(val, list):
+            names: list[str] = []
+            for item in val[:8]:
+                if isinstance(item, dict):
+                    fn = (item.get("file_name") or "").strip()
+                    if fn:
+                        names.append(fn)
+            uniq = []
+            for n in names:
+                if n not in uniq:
+                    uniq.append(n)
+            top = ", ".join(uniq[:4])
+            suffix = f" (showing up to 4 of {len(val)} hits)" if len(val) > 4 else ""
+            lines_out.append(
+                f"Retrieved {len(val)} chunk(s){suffix}" + (f": {top}" if top else "")
+            )
+            continue
+        if isinstance(val, (dict, list)):
+            raw = json.dumps(val, ensure_ascii=False, default=str)
+            lines_out.append(f"{key}: {_truncate_wire_text(raw, 140)}")
+        else:
+            lines_out.append(f"{key}: {_truncate_wire_text(str(val), 140)}")
+        if len(lines_out) >= 10:
+            break
+    return "\n".join(lines_out) if lines_out else "(no detail)"
+
+
 def _maybe_publish_wire(envelope: dict[str, Any]) -> None:
     if _data_publish_hook is None or not is_dev_mode():
         return
-    max_len = int(os.getenv("ALIJR_DEV_WIRE_MAX_CHARS", "900"))
     try:
         payload = {"v": 1, "ts": time.time(), **envelope}
         _data_publish_hook(payload)
@@ -140,11 +176,15 @@ def panel(title: str, rows: list[tuple[str, Any]]) -> None:
             out.append(f"      {line}")
     out.append(bar)
     _logger.info("\n".join(out))
-    max_len = int(os.getenv("ALIJR_DEV_WIRE_MAX_CHARS", "900"))
-    slim_rows: list[list[Any]] = []
-    for key, val in rows:
-        slim_rows.append([key, _sanitize_wire_val(val, max_len)])
-    _maybe_publish_wire({"type": "panel", "title": title, "rows": slim_rows})
+    if wire_summary_mode():
+        summary = _compact_wire_summary(title, rows)
+        _maybe_publish_wire({"type": "panel", "title": title, "summary": summary})
+    else:
+        max_len = int(os.getenv("ALIJR_DEV_WIRE_MAX_CHARS", "900"))
+        slim_rows: list[list[Any]] = []
+        for key, val in rows:
+            slim_rows.append([key, _sanitize_wire_val(val, max_len)])
+        _maybe_publish_wire({"type": "panel", "title": title, "rows": slim_rows})
 
 
 def subsection(title: str) -> None:

@@ -98,9 +98,9 @@ export default function Home() {
     <main className="min-h-screen bg-zinc-950 px-6 py-10 text-zinc-100">
       <div className="mx-auto max-w-4xl">
         <div className="rounded-3xl border border-zinc-800 bg-zinc-900/70 p-8 shadow-2xl shadow-black/30">
-          <h1 className="text-3xl font-semibold tracking-tight">AliJR Voice Console</h1>
+          <h1 className="text-3xl font-semibold tracking-tight">AliJR Assistant</h1>
           <p className="mt-2 text-sm text-zinc-400">
-            LiveKit + Gemini + RAG assistant for coursework and research.
+            Virtual Avatar of Ali Nawaf
           </p>
 
           <div className="mt-6 flex flex-wrap items-center gap-3">
