@@ -756,6 +756,27 @@ class KnowledgeBaseTools(Toolset):
             top_k_override: int | None = None,
             dev_pass_label: str = "",
         ) -> tuple[list, MetadataFilters | None, str, list[str]]:
+            """
+            Executes a search pass over the vector index for the given folder category and (optional) project slug.
+            
+            - Builds the appropriate metadata filters based on the folder category and project slug.
+            - Selects the top-K parameter from environment or override, with special handling for the "projects" category.
+            - Runs the index retriever to fetch relevant nodes (documents/snippets) matching the filters.
+            - Optionally traces detailed retrieval info in development mode.
+            
+            Args:
+                cat (FolderCategory): The category of folder to search in (e.g., submissions, research, projects).
+                proj_slug (str): The slug for a project (used in the filter if applicable).
+                top_k_override (int, optional): If provided, overrides the number of top results to consider.
+                dev_pass_label (str, optional): If set, triggers additional dev tracing in logs/panels.
+                
+            Returns:
+                tuple: (nodes, filters used, resolved project slug, metadata notes)
+                    nodes (list): Retrieved nodes/snippets.
+                    filters (MetadataFilters | None): Filters applied for this search pass.
+                    resolved_slug (str): Project slug finally used for filtering.
+                    meta_notes (list[str]): Notes/warnings about filtering/search decisions.
+            """
             filters, resolved_slug, meta_notes = self._build_metadata_filters(
                 folder_category=cat,
                 project_folder=proj_slug,
@@ -790,6 +811,7 @@ class KnowledgeBaseTools(Toolset):
                 )
                 dev_trace.rag_hits(nodes, label=f"search_documents[{dev_pass_label}]")
             return nodes, filters, resolved_slug, meta_notes
+       
 
         def _execute_pipeline(initial_slug: str) -> str:
             cat = folder_category
