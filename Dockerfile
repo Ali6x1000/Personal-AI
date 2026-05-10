@@ -9,6 +9,8 @@ RUN apt-get update \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+COPY .env .
+COPY cred/ ./cred/
 COPY agent.py server.py rag_indexer.py dev_trace.py start.sh ./
 COPY chroma_db/ ./chroma_db/
 

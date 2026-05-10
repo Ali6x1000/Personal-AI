@@ -8,7 +8,6 @@ Google services used by the agent.
 """
 
 from __future__ import annotations
-
 import json
 import os
 import re
@@ -38,7 +37,10 @@ _cors_kw: dict = dict(
 if _cors_regex:
     _cors_kw["allow_origin_regex"] = _cors_regex
 
-app.add_middleware(CORSMiddleware, **_cors_kw)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], 
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],)
 
 
 def _require_env(*keys: str) -> dict[str, str]:
@@ -125,6 +127,9 @@ def _mint_access_token_response(
         identity=participant_identity,
     )
 
+@app.get("/")
+async def health_check():
+    return {"status": "ok", "message": "AliJR is online"}
 
 @app.get("/getToken", response_model=TokenResponse)
 async def get_participant_token(
