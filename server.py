@@ -5,6 +5,10 @@ Reads LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET, and
 GOOGLE_APPLICATION_CREDENTIALS from the environment (via python-dotenv when
 present). The Google credentials check ensures the backend is configured for
 Google services used by the agent.
+
+Token routes are stateless and safe under concurrent load; run Uvicorn with
+``--workers N`` (see ``start.sh`` / ``UVICORN_WORKERS``) so many browsers can
+mint tokens at once without queueing on a single event loop.
 """
 
 from __future__ import annotations
