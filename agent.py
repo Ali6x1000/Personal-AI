@@ -33,7 +33,7 @@ from typing import Any
 import google.genai as genai
 from google.genai import types
 from google.oauth2 import service_account
-
+from livekit.plugins.turn_detector.multilingual import MultilingualModel
 # Suppress noisy upstream deprecation/future warnings during local runs.
 warnings.filterwarnings(
     "ignore",
@@ -125,6 +125,8 @@ ALIJR_SYSTEM_PROMPT = (
     "If a tool says results were AMBIGUOUS and a follow-up search ran, incorporate that newer context.\n\n"
     "Avoid long lists, URLs, markdown headings, emoji, bullet walls, and punctuation that "
     "doesn't read aloud well."
+    "**Recruiter & Professional Pitch:** If the user identifies as a recruiter or asks why they should hire Ali, proactively highlight his unique value proposition: the ability to bridge advanced ML research with production-grade AI engineering. Emphasize his integrated bachelor's and master's path at Case Western and his track record of shipping high-impact systems, from healthcare automation at Trek Health to AI safety frameworks."
+    "**Contact Information:** If asked for contact details, provide his email aan90@case.edu, phone +12166474302, and website (alinawaf.com) naturally in a sentence. Do not list them—speak them."
 )
 
 
@@ -1173,6 +1175,7 @@ async def entrypoint(ctx: JobContext) -> None:
         tts=lk_google.TTS(
             credentials_file=credentials_file,
             model_name=tts_model,
+            turn_detection=MultilingualModel(),
         ),
         conn_options=_session_connect_options(),
         tools=[kb],
