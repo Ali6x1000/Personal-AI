@@ -69,6 +69,7 @@ export default function Home() {
   const [serverUrl, setServerUrl] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [devTraceEnabled, setDevTraceEnabled] = useState(false);
+  const [livekitRoomId, setLivekitRoomId] = useState<string | null>(null);
 
   /** Prefer URL returned by the token API; optional NEXT_PUBLIC_LIVEKIT_URL override when set at build time. */
   const liveKitUrl =
@@ -88,6 +89,7 @@ export default function Home() {
     } catch (err) {
       setConnectionState("disconnected");
       setToken(null);
+      setLivekitRoomId(null);
       setError(err instanceof Error ? err.message : "Unable to start call.");
     }
   };
@@ -95,6 +97,7 @@ export default function Home() {
   const endCall = () => {
     setToken(null);
     setServerUrl(undefined);
+    setLivekitRoomId(null);
     setConnectionState("disconnected");
   };
 
@@ -161,24 +164,30 @@ export default function Home() {
           </p>
           {error && <p className="mt-4 text-sm text-rose-400">{error}</p>}
 
-          {token && (
+          {token && livekitRoomId && (
             <LiveKitRoom
+              key={livekitRoomId}
               serverUrl={liveKitUrl}
               token={token}
               audio={true}
               video={false}
               connect={true}
+              options={{
+                disconnectOnPageLeave: false,
+              }}
               onConnected={() => setConnectionState("connected")}
               onDisconnected={() => {
                 setConnectionState("disconnected");
                 setToken(null);
                 setServerUrl(undefined);
+                setLivekitRoomId(null);
                 setError("Disconnected from LiveKit room.");
               }}
               onError={(err) => {
                 setConnectionState("disconnected");
                 setToken(null);
                 setServerUrl(undefined);
+                setLivekitRoomId(null);
                 setError(err.message || "LiveKit connection failed.");
               }}
               className="mt-6"

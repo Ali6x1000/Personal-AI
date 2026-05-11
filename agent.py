@@ -1196,17 +1196,32 @@ async def entrypoint(ctx: JobContext) -> None:
 
 
 def main() -> None:
-    cli.run_app(
-        WorkerOptions(
-            entrypoint_fnc=entrypoint,
-            agent_name=os.getenv("LIVEKIT_AGENT_NAME", ""),
-            # On local Macs, process-based workers can time out during cold startup/imports.
-            job_executor_type=JobExecutorType.THREAD,
-            initialize_process_timeout=60.0,
-            # Keep local behavior predictable: one warm runner instead of CPU-count fan-out.
-            num_idle_processes=1,
-        )
+    # Load: > threshold marks worker unavailable for new jobs (prod default 0.7 in SDK). Raise with
+    # LIVEKIT_AGENT_LOAD_THRESHOLD=0.85 on a single fat host, or run multiple agent replicas (ECS tasks).
+    _load_thr_raw = os.getenv("LIVEKIT_AGENT_LOAD_THRESHOLD", "").strip()
+    load_threshold: float | None = None
+    if _load_thr_raw:
+        try:
+            load_threshold = float(_load_thr_raw)
+        except ValueError:
+            load_threshold = None
+
+    _idle_raw = os.getenv("LIVEKIT_AGENT_NUM_IDLE", "").strip()
+    num_idle = 1
+    if _idle_raw.isdigit():
+        num_idle = max(1, min(8, int(_idle_raw)))
+
+    opts = dict(
+        entrypoint_fnc=entrypoint,
+        agent_name=os.getenv("LIVEKIT_AGENT_NAME", ""),
+        job_executor_type=JobExecutorType.THREAD,
+        initialize_process_timeout=60.0,
+        num_idle_processes=num_idle,
     )
+    if load_threshold is not None:
+        opts["load_threshold"] = load_threshold
+
+    cli.run_app(WorkerOptions(**opts))
 
 
 if __name__ == "__main__":
