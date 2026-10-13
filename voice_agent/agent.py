@@ -97,17 +97,17 @@ class SiteTools:
 class AliJR(Agent):
     def __init__(self, tools: SiteTools) -> None:
         super().__init__(instructions=VOICE_PROMPT)
-        self._tools = tools
+        self._site = tools
 
     @function_tool
     async def read_resume(self, context: RunContext) -> str:
         """Load Ali's full resume: education, experience, skills and contact details."""
-        return await self._tools.call("readResume")
+        return await self._site.call("readResume")
 
     @function_tool
     async def list_projects(self, context: RunContext) -> str:
         """List the project folders in Ali's knowledge base."""
-        return await self._tools.call("listProjects")
+        return await self._site.call("listProjects")
 
     @function_tool
     async def search_knowledge(
@@ -124,7 +124,7 @@ class AliJR(Agent):
             folder_category: Which part of the knowledge base to search.
             project_folder: Exact project folder from list_projects when searching projects.
         """
-        return await self._tools.call(
+        return await self._site.call(
             "searchKnowledge",
             query=query,
             folderCategory=folder_category.value,
