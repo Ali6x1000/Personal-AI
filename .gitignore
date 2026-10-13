@@ -1,5 +1,10 @@
 .env
+.env.local
 /.venv
+voice_agent/.venv
+voice_agent/.env
+voice_agent/.env.local
+__pycache__/
 /__pycache__
 /alijr_knowledge_base
 /chroma_db
