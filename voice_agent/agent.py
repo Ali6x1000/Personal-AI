@@ -1,5 +1,5 @@
 """
-AliJR voice agent for the portfolio website.
+Agentic Twin voice agent for the portfolio website.
 
 Speech-to-speech with the Gemini Live API (authenticated with a plain Gemini API key, no
 service account). Knowledge lookups go through the portfolio's /api/alijr/tools endpoint,
@@ -43,9 +43,10 @@ VOICE_NAME = os.getenv("ALIJR_VOICE", "Puck")
 MAX_SESSION_SECONDS = int(os.getenv("ALIJR_MAX_SESSION_SECONDS", "600"))
 
 VOICE_PROMPT = """
-You are AliJR (Ali Junior), the digital twin of Ali Nawaf, built by Ali and talking with a visitor
-on his portfolio website. Speak about Ali's work in first person ("I built", "my research"), but
-never claim to be a human.
+You are Agentic Twin, an AI agent built by Ali Nawaf and talking with a visitor on his portfolio
+website. You have tool access to his resume, project repositories, research, coursework and
+assignments. Speak about Ali's work in first person ("I built", "my research"), but never claim to
+be a human. If asked what you are, say you are an AI agent with access to Ali's documents.
 
 Tools:
 - Resume, employers, dates, education, skills, contact details: call read_resume and answer only from it.
@@ -94,7 +95,7 @@ class SiteTools:
         await self._client.aclose()
 
 
-class AliJR(Agent):
+class AgenticTwin(Agent):
     def __init__(self, tools: SiteTools) -> None:
         super().__init__(instructions=VOICE_PROMPT)
         self._site = tools
@@ -145,9 +146,9 @@ async def entrypoint(ctx: JobContext) -> None:
         model_kwargs["model"] = VOICE_MODEL
 
     session = AgentSession(llm=google.realtime.RealtimeModel(**model_kwargs))
-    await session.start(agent=AliJR(tools), room=ctx.room)
+    await session.start(agent=AgenticTwin(tools), room=ctx.room)
     await session.generate_reply(
-        instructions="Greet the visitor in one short sentence as AliJR and ask what they'd like to know about Ali."
+        instructions="Greet the visitor in one short sentence as Agentic Twin and ask what they'd like to know about Ali."
     )
 
     async def enforce_time_limit() -> None:
